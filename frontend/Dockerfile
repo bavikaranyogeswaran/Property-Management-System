@@ -10,8 +10,8 @@ ENV VITE_API_URL=$VITE_API_URL
 # Copy dependency manifests
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies (ci ensures lockfile is respected)
+RUN npm ci
 
 # Copy source code
 COPY . .
