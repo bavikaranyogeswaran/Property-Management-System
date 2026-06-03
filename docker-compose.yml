@@ -205,6 +205,83 @@ services:
       options:
         max-size: "5m"
         max-file: "2"
+  # Data Warehouse Database (PostgreSQL)
+  dwh-db:
+    image: postgres:15-alpine
+    container_name: pms-dwh-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DWH_DB_NAME:-pms_dwh}
+      POSTGRES_USER: ${DWH_DB_USER:-dwh_user}
+      POSTGRES_PASSWORD: ${DWH_DB_PASSWORD:-dwh_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - dwh_db_data:/var/lib/postgresql/data
+    networks:
+      - pms-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DWH_DB_USER:-dwh_user} -d ${DWH_DB_NAME:-pms_dwh}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # BI Tool (Metabase)
+  metabase:
+    image: metabase/metabase:latest
+    container_name: pms-metabase
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${DWH_DB_NAME:-pms_dwh}
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${DWH_DB_USER:-dwh_user}
+      MB_DB_PASS: ${DWH_DB_PASSWORD:-dwh_password}
+      MB_DB_HOST: dwh-db
+    networks:
+      - pms-network
+    depends_on:
+      dwh-db:
+        condition: service_healthy
+
+  # ETL Worker (Node.js)
+  etl-worker:
+    build:
+      context: ./etl
+      dockerfile: Dockerfile
+    container_name: pms-etl-worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      dwh-db:
+        condition: service_healthy
+    environment:
+      # Source DB
+      - SRC_DB_HOST=db
+      - SRC_DB_USER=${DB_USER:-pms_user}
+      - SRC_DB_PASSWORD=${DB_PASSWORD:-password}
+      - SRC_DB_NAME=${DB_NAME:-pms_database}
+      # Dest DB
+      - DWH_DB_HOST=dwh-db
+      - DWH_DB_USER=${DWH_DB_USER:-dwh_user}
+      - DWH_DB_PASSWORD=${DWH_DB_PASSWORD:-dwh_password}
+      - DWH_DB_NAME=${DWH_DB_NAME:-pms_dwh}
+      # CRON
+      - ETL_CRON_SCHEDULE=0 1 * * *
+    networks:
+      - pms-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   pms-network:
@@ -215,3 +292,4 @@ volumes:
   pms_uploads_data:
   pms_logs_data:
   pms_redis_data:
+  dwh_db_data:
