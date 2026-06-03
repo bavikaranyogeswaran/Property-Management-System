@@ -17,6 +17,7 @@ A full-stack web application for managing rental properties — covering the com
 - [API Overview](#api-overview)
 - [Database](#database)
 - [Background Jobs](#background-jobs)
+- [Data Warehouse & Analytics](#data-warehouse--analytics)
 - [Testing](#testing)
 - [Deployment](#deployment)
 
@@ -43,6 +44,7 @@ This system is designed for property owners, tenants, and treasurers to manage r
 | **Notifications**      | In-app notifications and email alerts via Gmail SMTP                                               |
 | **Auditing**           | Full audit trail, behavior logging, activity tracking                                              |
 | **Admin / System**     | Health checks, cache management, image management                                                  |
+| **Analytics & BI**     | Data Warehouse (PostgreSQL), ETL job pipeline, and Metabase integration for dashboards & reports   |
 
 ---
 
@@ -53,6 +55,8 @@ This system is designed for property owners, tenants, and treasurers to manage r
 - **Runtime:** Node.js 20 (Alpine)
 - **Framework:** Express.js
 - **Database:** MySQL 8.0 via Knex.js (query builder + migrations)
+- **Data Warehouse:** PostgreSQL 15
+- **ETL Sync:** Node.js, `mysql2`, `pg`, `pg-format`, `node-cron`
 - **Cache / Queue:** Redis 7 + BullMQ
 - **Scheduling:** node-cron
 - **Payments:** Stripe
@@ -75,6 +79,7 @@ This system is designed for property owners, tenants, and treasurers to manage r
 
 - **Containerization:** Docker + Docker Compose
 - **Web server (prod):** Nginx (serves the React SPA)
+- **BI Platform:** Metabase
 - **CI hooks:** Husky + lint-staged + Prettier
 
 ---
@@ -158,6 +163,12 @@ SMTP_PASS=your_gmail_app_password
 FRONTEND_URL=http://localhost:5173
 VITE_API_URL=http://localhost:3000/api
 VITE_ENABLE_PAYMENT_SIMULATION=true
+
+# Data Warehouse & ETL
+DWH_DB_NAME=pms_dwh
+DWH_DB_USER=dwh_user
+DWH_DB_PASSWORD=dwh_password
+ETL_CRON_SCHEDULE="0 1 * * *"
 ```
 
 > For Gmail SMTP, generate an [App Password](https://myaccount.google.com/apppasswords) with 2FA enabled.
@@ -184,6 +195,11 @@ node worker.js
 cd frontend
 npm install
 npm run dev              # Start Vite dev server on :5173
+
+# 5. ETL Worker (separate terminal, optional for local analytics development)
+cd etl
+npm install
+npm start                # Run the ETL sync process
 ```
 
 Access the app at `http://localhost:5173`.
@@ -222,6 +238,8 @@ This script validates the `.env` file, checks Docker availability, builds images
 | Health check | http://localhost:3000/api/health |
 | MySQL        | localhost:3307                   |
 | Redis        | localhost:6379                   |
+| Metabase     | http://localhost:3001            |
+| PostgreSQL   | localhost:5432                   |
 
 ---
 
@@ -261,6 +279,12 @@ Property Management System/
 │   ├── nginx.conf          # Nginx config for production SPA serving
 │   └── Dockerfile          # Multi-stage build (Node → Nginx)
 │
+├── etl/                    # ETL pipeline syncing MySQL to PostgreSQL DWH
+│   ├── index.js            # ETL pipeline runner & scheduler (cron)
+│   ├── schema.sql          # Target PostgreSQL schema (facts & dimensions)
+│   ├── package.json        # ETL dependencies and scripts
+│   └── Dockerfile          # ETL worker service container build
+│
 ├── docker-compose.yml      # Full-stack service orchestration
 ├── deploy.ps1              # Windows PowerShell deployment script
 └── package.json            # Root workspace (Husky, Prettier, lint-staged)
@@ -293,6 +317,8 @@ All endpoints are prefixed with `/api`.
 
 ## Database
 
+### Transactional Database (OLTP)
+
 Managed with **Knex.js migrations**. All schema changes are versioned under `backend/migrations/`.
 
 ```bash
@@ -307,6 +333,10 @@ npm run migrate:make -- <migration_name>
 ```
 
 The reference schema (`backend/database/schema.sql`) documents all 20+ normalized tables including: `users`, `properties`, `units`, `leases`, `payments`, `invoices`, `receipts`, `ledger_entries`, `maintenance_requests`, `leads`, `audit_logs`, and more.
+
+### Analytical Database (OLAP)
+
+A separate PostgreSQL database is utilized for data warehousing and analytics. For details on the architecture, schema, and synchronization process, see [Data Warehouse & Analytics](#data-warehouse--analytics).
 
 ---
 
@@ -329,6 +359,68 @@ node backend/worker.js
 ```
 
 In Docker, the worker runs as its own container alongside the API container.
+
+---
+
+## Data Warehouse & Analytics
+
+The system features a dedicated Data Warehouse (OLAP) database to support analytical reporting and dashboards, isolated from the production transactional (OLTP) database.
+
+### Architecture
+
+Data flows from the transactional MySQL database to the PostgreSQL Data Warehouse via a scheduled ETL worker:
+
+```
+                      ┌──────────────────────┐
+                      │   MySQL Database     │
+                      │  (OLTP Transaction)  │
+                      └──────────┬───────────┘
+                                 │
+                                 │ Extract (Daily Cron)
+                                 ▼
+                      ┌──────────────────────┐
+                      │      ETL Worker      │
+                      │   (etl-worker/Node)  │
+                      └──────────┬───────────┘
+                                 │
+                                 │ Transform & Load
+                                 ▼
+                      ┌──────────────────────┐
+                      │ PostgreSQL Database  │
+                      │  (OLAP Data Warehse) │
+                      └──────────┬───────────┘
+                                 │
+                                 │ Query
+                                 ▼
+                      ┌──────────────────────┐
+                      │  Metabase BI Server  │
+                      │    (Port 3001)       │
+                      └──────────────────────┘
+```
+
+- **ETL Worker (`etl-worker`)**: A Node.js container that periodically reads from the transactional MySQL database, processes and transforms the data, and loads it into the PostgreSQL database.
+- **PostgreSQL (`dwh-db`)**: The host for the star-schema dimensional models.
+- **Metabase (`metabase`)**: Connects directly to the PostgreSQL database, providing a user-friendly business intelligence interface for building reports and dashboards.
+
+### Schema Design
+
+The Data Warehouse schema is structured into **Dimensions** and **Facts** under [schema.sql](file:///c:/Users/Bavikaran/Desktop/New%20folder%20%282%29/Property%20Management%20System/etl/schema.sql):
+
+#### Dimensions
+- `dim_property`: Property details (name, type, location, status, fees).
+- `dim_unit`: Unit details (unit number, type, rent, status).
+- `dim_tenant`: Tenant profile and scoring metrics.
+- `dim_date`: Date hierarchy support for time-series analytics.
+
+#### Facts
+- `fact_ledger`: Financial ledger records (debits, credits, category, accounts).
+- `fact_occupancy_snapshot`: Periodic occupancy status snapshots per property.
+- `fact_maintenance`: Maintenance requests and total tracked cost analytics.
+- `fact_leads`: Leads capture, status, and lead scoring historical conversion time.
+
+### Job Schedule
+
+The ETL job schedule is configured using the `ETL_CRON_SCHEDULE` environment variable (default: once daily at 1:00 AM `0 1 * * *`). It runs once automatically upon service startup.
 
 ---
 
