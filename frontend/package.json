@@ -7,7 +7,10 @@
     "build": "vite build",
     "dev": "vite",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,css,scss,json}\"",
-    "lint:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,css,scss,json}\""
+    "lint:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,css,scss,json}\"",
+    "test": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -76,14 +79,20 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^25.0.10",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/yauzl": "^2.10.3",
     "@vitejs/plugin-react": "4.7.0",
+    "@vitest/coverage-v8": "^4.1.8",
+    "jsdom": "^29.1.1",
     "prettier": "^3.8.1",
     "tailwindcss": "4.1.12",
-    "vite": "6.3.5"
+    "vite": "6.3.5",
+    "vitest": "^4.1.8"
   },
   "peerDependencies": {
     "react": "18.3.1",

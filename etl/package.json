@@ -5,12 +5,18 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "mysql2": "^3.9.0",
+    "node-cron": "^3.0.3",
     "pg": "^8.11.3",
-    "pg-format": "^1.0.4",
-    "node-cron": "^3.0.3"
+    "pg-format": "^1.0.4"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.8",
+    "vitest": "^4.1.8"
   }
 }

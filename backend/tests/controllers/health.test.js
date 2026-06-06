@@ -1,17 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
-import app from '../server.js';
-import db from '../config/db.js';
+import app from '../../server.js';
+import db from '../../config/db.js';
 
 // Mock the database to avoid real connections during tests
-vi.mock('../config/db.js', () => ({
+vi.mock('../../config/db.js', () => ({
   default: {
     query: vi.fn(),
   },
 }));
 
 // Mock Redis to avoid hangs during tests
-vi.mock('../config/redis.js', () => ({
+vi.mock('../../config/redis.js', () => ({
   default: {
     ping: vi.fn().mockResolvedValue('PONG'),
     on: vi.fn(),
@@ -29,7 +29,7 @@ vi.mock('../config/redis.js', () => ({
 }));
 
 // Mock rate limiters to avoid Redis calls during app initialization
-vi.mock('../utils/rateLimiters.js', () => {
+vi.mock('../../utils/rateLimiters.js', () => {
   const mockLimiter = (req, res, next) => next();
   return {
     apiLimiter: mockLimiter,

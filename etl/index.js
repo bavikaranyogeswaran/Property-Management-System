@@ -177,4 +177,10 @@ async function init() {
   console.log(`ETL Job scheduled with cron: ${CRON_SCHEDULE}`);
 }
 
-init();
+import { fileURLToPath } from 'url';
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  init();
+}
+
+export { runETL, init };
