@@ -20,6 +20,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import db from './config/db.js';
 import redis from './config/redis.js';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './config/swagger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -170,6 +172,46 @@ import guestPaymentRoutes from './routes/guestPaymentRoutes.js';
 // ... (rest of imports)
 app.use('/api/lead-portal', publicPortalLimiter, leadPortalRoutes);
 
+// ============================================================================
+//  API DOCUMENTATION (Swagger / OpenAPI 3.0)
+// ============================================================================
+//  - GET /api/docs        Interactive Swagger UI
+//  - GET /api/docs.json   Raw OpenAPI JSON (for codegen, Postman import, etc.)
+// ============================================================================
+app.get('/api/docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
+app.use(
+  '/api/docs',
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, {
+    explorer: true,
+    customSiteTitle: 'PMS API Docs',
+    swaggerOptions: { persistAuthorization: true },
+  })
+);
+
+/**
+ * @openapi
+ * /api/health:
+ *   get:
+ *     tags: [Health]
+ *     summary: Liveness / readiness probe
+ *     description: Verifies database and Redis connectivity. Returns 200 when healthy, 503 when degraded.
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: All dependencies are reachable.
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/HealthStatus' }
+ *       503:
+ *         description: At least one dependency is unreachable.
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/HealthStatus' }
+ */
 app.get('/api/health', async (req, res) => {
   const timeout = (ms) =>
     new Promise((_, reject) =>

@@ -42,6 +42,8 @@
     "pdfkit": "^0.17.2",
     "rate-limit-redis": "^4.3.1",
     "stripe": "^22.0.2",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1",
     "uuid": "^13.0.0",
     "winston": "^3.19.0",
     "winston-cloudwatch": "^6.3.0",
